@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:mcp="http://www.mulesoft.org/schema/mule/mcp"
+	xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/mcp http://www.mulesoft.org/schema/mule/mcp/current/mule-mcp.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="9a445fbe-9aae-482b-ae93-10a8c62538e3" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="c757def8-55b7-4b9a-8a77-f48f1a7c6c4d" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="arnab" database="Hotel1" />
+	</db:config>
+	<mcp:server-config name="MCP_Server" doc:name="MCP Server" doc:id="56b72153-f24f-4b8a-82f6-4a43c25e29c8" serverName="mule" serverVersion="1" >
+		<mcp:streamable-http-server-connection listenerConfig="HTTP_Listener_config" />
+	</mcp:server-config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="d7d3b62f-425f-4b26-94c3-dea518ec0bce" >
+		<jms:active-mq-connection />
+	</jms:config>
+	<db:config name="Database_Config1" doc:name="Database Config" doc:id="772dbf2c-8ad9-46d4-9dbc-cb5f13cfd578" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="arnab" database="hotel_booking" />
+	</db:config>
+	
+	<flow name="project-aiFlow" doc:id="562734fe-544f-4ac5-88d0-23b57fb9b0e6" >
+		<http:listener doc:name="Listener" doc:id="65d6916b-75ac-44b2-bff5-d92ed7cc726a" config-ref="HTTP_Listener_config" path="/api/db"/>
+		<db:select doc:name="Select" doc:id="dba36ca6-ad9c-4f14-956b-195355722fe0" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT * FROM vw_hotel_summary;]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="3b315824-8449-4b4d-a020-70493d217930" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	
+	<flow name="project-aiFlow2" doc:id="ebd9e861-312c-4e09-85ab-2d93efc58ff7" >
+		<http:listener doc:name="Listener" doc:id="61b0374e-2227-4bf1-a933-18057357bd28" config-ref="HTTP_Listener_config" path="/api/queue" allowedMethods="POST"/>
+		
+		<ee:transform doc:name="Transform Message" doc:id="f50ad062-78ff-4860-be0d-d4b6595c4417" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    chatId: payload.chatId,
+    Name: payload.Name default payload.name default null,
+    Email: payload.Email default payload.email default null,
+    booking_destination: payload.booking_destination default payload.destination default null,
+    booking_country: payload.booking_country default payload.country default null
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<jms:publish doc:name="Publish" doc:id="e6ee6435-1f17-4fc3-8e42-6e594a180ff5" config-ref="JMS_Config" destination="base-hotel-db" sendCorrelationId="AUTO"/>
+	</flow>
+
+	<flow name="project-aiFlow3-Subscriber" doc:id="76ec02d3-d7f0-4144-9aa0-4e0c364b148e">
+		<jms:listener doc:name="JMS Queue Subscriber" doc:id="cd17c080-8c2e-4036-84b2-566096a85c1a" config-ref="JMS_Config" destination="base-hotel-db"/>
+		<db:insert doc:name="Insert" doc:id="1627ef54-fe2b-4715-ba66-4d00c793b3b7" config-ref="Database_Config1">
+			<db:sql ><![CDATA[INSERT INTO UserBooking (chatId, Name, Email, booking_destination, booking_country, booking_date) 
+        VALUES (:chatId, :name, :email, :destination, :country, NOW());]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+    chatId: payload.chatId,
+    name: payload.Name,           
+          email: payload.Email,         
+                destination: payload.booking_destination,
+                 country: payload.booking_country          }]]]></db:input-parameters>
+		</db:insert>
+		<set-variable value="#[payload.Email]" doc:name="Set Emailvar" doc:id="b0d4a93f-298b-4379-8a78-35687b107b56" variableName="EmailVar" />
+		<logger level="INFO" doc:name="Logger" doc:id="07ad4b55-f029-4ed9-aaeb-a40ebc64b52d" message="#[vars.EmailVar]"/>
+		<flow-ref doc:name="Flow Reference" doc:id="a22d0f33-96b3-4b10-aebf-4c0742367987" name="project-aiFlow1"/>
+	
+</flow>
+	<flow name="project-aiFlow1" doc:id="bf85971c-7c19-4461-9e26-6b4ea95266ff" >
+		<email:send doc:name="Send" doc:id="fe5dba98-bafb-42df-9498-da2a22476d16" toAddresses=""/>
+	</flow>
+
+</mule>

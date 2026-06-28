@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<types:mule xmlns:types="http://www.mulesoft.org/schema/mule/types">
+  <types:catalog/>
+  <types:enrichment select="#64d7b9f3-ab77-4840-9c5d-540f6e1c54d1">
+    <types:processor-declaration>
+      <types:input-event>
+        <types:message>
+          <types:attributes type="null"/>
+        </types:message>
+      </types:input-event>
+    </types:processor-declaration>
+  </types:enrichment>
+</types:mule>
